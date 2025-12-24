@@ -1,47 +1,92 @@
 /***** CONFIG *****/
-const API_URL = 'http://localhost:3000/api/dictionary'; // آدرس API سرور
-const MIN_FROM_LEN = 2; // حداقل طول from برای پرهیز از کلمات بسیار کوتاه
+const API_URL = 'http://localhost:3000/api/dictionary'; // API server address
+const MIN_FROM_LEN = 2; // Minimum 'from' length to avoid very short words
+let CURRENT_LANG = 'en'; // Default language: "en" (English), "fa" (Persian), "es" (Spanish), "pt" (Portuguese)
 /*******************/
 
 function onOpen() {
-  DocumentApp.getUi()
-    .createMenu('🔤 Humanize Text')
-    .addItem('جایگزینی امن (حفظ استایل/چینش)', 'safeReplaceFromAPI')
-    .addSeparator()
-    .addItem('پیش‌نمایش شمارش (همان منطق مرز)', 'previewCounts')
-    .addSeparator()
-    .addItem('افزودن کلمه جدید', 'showAddWordDialog')
-    .addToUi();
+  const ui = DocumentApp.getUi();
+  
+  // Main menu
+  const menu = ui.createMenu('🔤 Humanize Text');
+  
+  // Language selection submenu
+  const langMenu = ui.createMenu('🌍 Language');
+  langMenu.addItem('🇮🇷 فارسی', 'setLanguageFa');
+  langMenu.addItem('🇺🇸 English', 'setLanguageEn');
+  langMenu.addItem('🇪🇸 Español', 'setLanguageEs');
+  langMenu.addItem('🇵🇹 Português', 'setLanguagePt');
+  
+  menu.addSubMenu(langMenu);
+  menu.addSeparator();
+  menu.addItem('Safe Replace (Preserve Styles)', 'safeReplaceFromAPI');
+  menu.addItem('Preview Counts (Word Boundaries)', 'previewCounts');
+  menu.addSeparator();
+  menu.addItem('Add New Word', 'showAddWordDialog');
+  menu.addToUi();
+}
+
+// Language setting functions
+function setLanguageFa() {
+  CURRENT_LANG = 'fa';
+  PropertiesService.getDocumentProperties().setProperty('LANGUAGE', 'fa');
+  DocumentApp.getUi().alert('✅ Language changed to Persian');
+}
+
+function setLanguageEn() {
+  CURRENT_LANG = 'en';
+  PropertiesService.getDocumentProperties().setProperty('LANGUAGE', 'en');
+  DocumentApp.getUi().alert('✅ Language changed to English');
+}
+
+function setLanguageEs() {
+  CURRENT_LANG = 'es';
+  PropertiesService.getDocumentProperties().setProperty('LANGUAGE', 'es');
+  DocumentApp.getUi().alert('✅ Idioma cambiado a Español');
+}
+
+function setLanguagePt() {
+  CURRENT_LANG = 'pt';
+  PropertiesService.getDocumentProperties().setProperty('LANGUAGE', 'pt');
+  DocumentApp.getUi().alert('✅ Idioma alterado para Português');
+}
+
+// Get current language
+function getCurrentLanguage() {
+  const stored = PropertiesService.getDocumentProperties().getProperty('LANGUAGE');
+  return stored || 'fa';
 }
 
 /* -------------------- Helpers -------------------- */
 function normalizeFa(s) {
   if (!s) return s;
   return String(s)
-    .replace(/\u064A/g, '\u06CC') // ي -> ی
-    .replace(/\u0643/g, '\u06A9') // ك -> ک
-    .replace(/\u0640/g, '')       // ـ
+    .replace(/\u064A/g, '\u06CC') // Arabic yeh -> Persian yeh
+    .replace(/\u0643/g, '\u06A9') // Arabic kaf -> Persian kaf
+    .replace(/\u0640/g, '')       // Remove tatweel
     .trim();
 }
 
 function escForFindText_(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-// تعریف «حرف داخل واژه» (لاتین/عدد/_ و فارسی)
+// Define "word character" (Latin/digit/_ and Persian)
 function isWordChar_(ch){
-  if (!ch) return false;               // ابتدای/انتهای element = مرز
+  if (!ch) return false;               // Start/end of element = boundary
   if (/[A-Za-z0-9_]/.test(ch)) return true;
   const code = ch.charCodeAt(0);
   return (code >= 0x0600 && code <= 0x06FF);
 }
-// مرز = هر چیزی که «حرف داخل واژه» نباشد
+// Boundary = anything that is not a "word character"
 function isWordBoundary_(ch){ return !isWordChar_(ch); }
 
-/** خواندن دیکشنری از API و انتخاب تصادفی از to
- * خروجی: [{from, to}] مرتب‌شده بر اساس طول from (نزولی)
+/** Read dictionary from API and randomly select from 'to' options
+ * Output: [{from, to}] sorted by 'from' length (descending)
  */
 function readDictionaryObjects() {
   try {
-    const response = UrlFetchApp.fetch(API_URL);
+    const lang = getCurrentLanguage();
+    const url = API_URL + '?lang=' + lang;
+    const response = UrlFetchApp.fetch(url);
     const dictionary = JSON.parse(response.getContentText());
     const rows = [];
 
@@ -54,11 +99,11 @@ function readDictionaryObjects() {
       rows.push({ from, to: pick });
     });
 
-    // عبارات بلندتر اول
+    // Longer phrases first
     rows.sort((a, b) => b.from.length - a.from.length);
     return rows;
   } catch (e) {
-    DocumentApp.getUi().alert('❌ خطا در اتصال به API:\n' + e.message);
+    DocumentApp.getUi().alert('❌ API Connection Error:\n' + e.message);
     return [];
   }
 }
@@ -71,7 +116,7 @@ function safeReplaceFromAPI() {
   let touched = 0;
 
   dict.forEach(({ from, to }) => {
-    // جستجو با الگوی literal؛ مرز را دستی چک می‌کنیم
+    // Search with literal pattern; check boundaries manually
     let range = null;
     const needle = escForFindText_(from);
 
@@ -84,22 +129,22 @@ function safeReplaceFromAPI() {
 
       const textEl = el.asText();
       const start  = range.getStartOffset();
-      const end    = range.getEndOffsetInclusive(); // ⬅️ تصحیح: به‌جای getEndOffset()
+      const end    = range.getEndOffsetInclusive();
 
       const full   = textEl.getText();
       const beforeChar = (start > 0) ? full.charAt(start - 1) : null;
       const afterChar  = (end < full.length - 1) ? full.charAt(end + 1) : null;
 
       if (!isWordBoundary_(beforeChar) || !isWordBoundary_(afterChar)) {
-        // مرز نبود → رد
+        // Not at word boundary → skip
         continue;
       }
 
-      // استایل کاراکتر اول match
+      // Style of first character in match
       const attrs = textEl.getAttributes(start);
 
-      // حذف محدوده و درج متن جدید
-      textEl.deleteText(start, end);      // end «inclusive» است
+      // Delete range and insert new text
+      textEl.deleteText(start, end);
       textEl.insertText(start, to);
 
       if (to.length > 0) {
@@ -107,11 +152,10 @@ function safeReplaceFromAPI() {
       }
 
       touched++;
-      // ادامه جستجو از بعدِ درج فعلی به‌طور خودکار توسط findText مدیریت می‌شود
     }
   });
 
-  DocumentApp.getUi().alert('✅ جایگزینی انجام شد. قطعات تغییر کرده: ' + touched);
+  DocumentApp.getUi().alert('✅ Replacement completed. Items changed: ' + touched);
 }
 
 /* -------------------- Preview (approx count using boundaries) -------------------- */
@@ -119,12 +163,11 @@ function previewCounts() {
   const dict = readDictionaryObjects();
   const text = DocumentApp.getActiveDocument().getBody().getText();
 
-  let report = 'پیش‌نمایش (مرز کامل + طول‌محور):\n';
+  let report = 'Preview (Full Boundaries + Length-Based):\n';
   let hits = 0;
 
   dict.forEach(({ from }) => {
-    // شمارش تقریبی: با regex ساده (مرز = غیرحرفی/ابتدا/انتها)
-    // فقط برای نمایش؛ اجرای اصلی با in-place انجام می‌شود
+    // Approximate count: simple regex (boundary = non-letter/start/end)
     const WORD_INNER = 'A-Za-z0-9_\\u0600-\\u06FF';
     const before = '(^|[^' + WORD_INNER + '])';
     const after  = '($|[^' + WORD_INNER + '])';
@@ -134,15 +177,15 @@ function previewCounts() {
       const count = m ? m.length : 0;
       if (count > 0) { report += `• ${from} → ${count}\n`; hits += count; }
     } catch(e) {
-      // اگر عبارتی خیلی خاص بود و خطا داد، در اجرا باز هم با in-place بررسی می‌شود
+      // If a phrase is very special and causes an error, it will still be checked during in-place execution
     }
   });
 
-  if (hits === 0) report += 'موردی یافت نشد.';
+  if (hits === 0) report += 'No matches found.';
   DocumentApp.getUi().alert(report);
 }
 
-/* -------------------- افزودن کلمه جدید -------------------- */
+/* -------------------- Add New Word -------------------- */
 function showAddWordDialog() {
   const html = HtmlService.createHtmlOutput(`
     <!DOCTYPE html>
@@ -150,7 +193,7 @@ function showAddWordDialog() {
       <head>
         <base target="_top">
         <style>
-          body { font-family: Tahoma, Arial; padding: 20px; direction: rtl; }
+          body { font-family: Tahoma, Arial; padding: 20px; direction: ltr; }
           input, textarea { width: 100%; padding: 8px; margin: 10px 0; font-size: 14px; }
           button { background: #4CAF50; color: white; padding: 10px 20px; border: none; cursor: pointer; font-size: 14px; }
           button:hover { background: #45a049; }
@@ -159,14 +202,14 @@ function showAddWordDialog() {
         </style>
       </head>
       <body>
-        <h3>افزودن کلمه جدید به دیکشنری</h3>
-        <label>کلمه مبدا (from):</label>
-        <input type="text" id="from" placeholder="مثال: در نهایت">
+        <h3>Add New Word to Dictionary</h3>
+        <label>Source phrase (from):</label>
+        <input type="text" id="from" placeholder="Example: in order to">
         
-        <label>کلمه مقصد (to):</label>
-        <textarea id="to" rows="2" placeholder="مثال: آخرش / در نهایت"></textarea>
+        <label>Target phrase (to):</label>
+        <textarea id="to" rows="2" placeholder="Example: to / so that"></textarea>
         
-        <button onclick="addWord()">افزودن</button>
+        <button onclick="addWord()">Add</button>
         <div id="message"></div>
         
         <script>
@@ -175,7 +218,7 @@ function showAddWordDialog() {
             const to = document.getElementById('to').value.trim();
             
             if (!from || !to) {
-              document.getElementById('message').innerHTML = '<p class="error">لطفاً هر دو فیلد را پر کنید</p>';
+              document.getElementById('message').innerHTML = '<p class="error">Please fill both fields</p>';
               return;
             }
             
@@ -196,7 +239,7 @@ function showAddWordDialog() {
           }
           
           function onError(error) {
-            document.getElementById('message').innerHTML = '<p class="error">خطا: ' + error.message + '</p>';
+            document.getElementById('message').innerHTML = '<p class="error">Error: ' + error.message + '</p>';
           }
         </script>
       </body>
@@ -205,12 +248,13 @@ function showAddWordDialog() {
     .setWidth(400)
     .setHeight(300);
   
-  DocumentApp.getUi().showModalDialog(html, 'افزودن کلمه جدید');
+  DocumentApp.getUi().showModalDialog(html, 'Add New Word');
 }
 
 function addWordToAPI(from, to) {
   try {
-    const payload = JSON.stringify({ from: from, to: to });
+    const lang = getCurrentLanguage();
+    const payload = JSON.stringify({ from: from, to: to, lang: lang });
     const options = {
       method: 'post',
       contentType: 'application/json',
@@ -222,11 +266,11 @@ function addWordToAPI(from, to) {
     const result = JSON.parse(response.getContentText());
     
     if (response.getResponseCode() === 200) {
-      return { success: true, message: result.message || 'کلمه با موفقیت اضافه شد' };
+      return { success: true, message: result.message || 'Word added successfully' };
     } else {
-      return { success: false, error: result.error || 'خطا در افزودن کلمه' };
+      return { success: false, error: result.error || 'Error adding word' };
     }
   } catch (e) {
-    return { success: false, error: 'خطا در اتصال به API: ' + e.message };
+    return { success: false, error: 'API connection error: ' + e.message };
   }
 }

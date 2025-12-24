@@ -1,44 +1,48 @@
 /***** CONFIG *****/
 const SHEET_ID   = '1tYYH6jheUyyGtbPewPpGlptTZR-zW0zU-R9Opak5qHI';
-const SHEET_NAME = 'dictionery';   // B=from , C=to  (C می‌تواند چند گزینه با / داشته باشد)
+const SHEET_NAME = 'dictionery';   // B=from , C=to  (C can have multiple options separated by /)
 const FROM_COL   = 2; // B
 const TO_COL     = 3; // C
-const MIN_FROM_LEN = 2; // حداقل طول from برای پرهیز از کلمات بسیار کوتاه
+const MIN_FROM_LEN = 2; // Minimum length of "from" to avoid very short words
 /*******************/
 
 function onOpen() {
   DocumentApp.getUi()
-    .createMenu('🔤 Nons Dictionary')
-    .addItem('جایگزینی امن (حفظ استایل/چینش)', 'safeReplaceFromSheet')
+    .createMenu('🔤 Humanize Text')
+    .addItem('Safe Replace (Preserve Style/Alignment)', 'safeReplaceFromSheet')
     .addSeparator()
-    .addItem('پیش‌نمایش شمارش (همان منطق مرز)', 'previewCounts')
+    .addItem('Preview Count (Same Boundary Logic)', 'previewCounts')
     .addToUi();
 }
 
 /* -------------------- Helpers -------------------- */
-function normalizeFa(s) {
+function normalizeText(s) {
   if (!s) return s;
-  return String(s)
-    .replace(/\u064A/g, '\u06CC') // ي -> ی
-    .replace(/\u0643/g, '\u06A9') // ك -> ک
-    .replace(/\u0640/g, '')       // ـ
-    .trim();
+  let normalized = String(s).trim();
+  
+  // Persian-specific normalization (only affects Persian text)
+  normalized = normalized
+    .replace(/\u064A/g, '\u06CC') // Arabic yeh -> Persian yeh (ي -> ی)
+    .replace(/\u0643/g, '\u06A9') // Arabic kaf -> Persian kaf (ك -> ک)
+    .replace(/\u0640/g, '');      // Remove tatweel (ـ)
+  
+  return normalized;
 }
 
 function escForFindText_(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-// تعریف «حرف داخل واژه» (لاتین/عدد/_ و فارسی)
+// Define "word character" (Latin/number/_ and Persian)
 function isWordChar_(ch){
-  if (!ch) return false;               // ابتدای/انتهای element = مرز
+  if (!ch) return false;               // Start/end of element = boundary
   if (/[A-Za-z0-9_]/.test(ch)) return true;
   const code = ch.charCodeAt(0);
   return (code >= 0x0600 && code <= 0x06FF);
 }
-// مرز = هر چیزی که «حرف داخل واژه» نباشد
+// Boundary = anything that is not a "word character"
 function isWordBoundary_(ch){ return !isWordChar_(ch); }
 
-/** خواندن شیت و انتخاب تصادفی از to
- * خروجی: [{from, to}] مرتب‌شده بر اساس طول from (نزولی)
+/** Read sheet and randomly select from "to"
+ * Output: [{from, to}] sorted by length of "from" (descending)
  */
 function readDictionaryObjects() {
   const sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
@@ -51,19 +55,18 @@ function readDictionaryObjects() {
 
   values.forEach(([fromRaw, toRaw]) => {
     if (!fromRaw || !toRaw) return;
-    const from = normalizeFa(fromRaw);
-    const options = String(toRaw).split('/').map(s => normalizeFa(s)).filter(Boolean);
+    const from = normalizeText(fromRaw);
+    const options = String(toRaw).split('/').map(s => normalizeText(s)).filter(Boolean);
     if (!from || from.length < MIN_FROM_LEN || options.length === 0) return;
     const pick = options[Math.floor(Math.random() * options.length)];
     rows.push({ from, to: pick });
   });
 
-  // عبارات بلندتر اول
+  // Longer phrases first
   rows.sort((a, b) => b.from.length - a.from.length);
   return rows;
 }
 
-/* -------------------- Replace IN-PLACE (preserve styles & alignment) -------------------- */
 /* -------------------- Replace IN-PLACE (preserve styles & alignment) -------------------- */
 function safeReplaceFromSheet() {
   const dict = readDictionaryObjects();
@@ -72,7 +75,7 @@ function safeReplaceFromSheet() {
   let touched = 0;
 
   dict.forEach(({ from, to }) => {
-    // جستجو با الگوی literal؛ مرز را دستی چک می‌کنیم
+    // Search with literal pattern; manually check boundaries
     let range = null;
     const needle = escForFindText_(from);
 
@@ -85,22 +88,22 @@ function safeReplaceFromSheet() {
 
       const textEl = el.asText();
       const start  = range.getStartOffset();
-      const end    = range.getEndOffsetInclusive(); // ⬅️ تصحیح: به‌جای getEndOffset()
+      const end    = range.getEndOffsetInclusive(); // ⬅️ Correction: use getEndOffsetInclusive()
 
       const full   = textEl.getText();
       const beforeChar = (start > 0) ? full.charAt(start - 1) : null;
       const afterChar  = (end < full.length - 1) ? full.charAt(end + 1) : null;
 
       if (!isWordBoundary_(beforeChar) || !isWordBoundary_(afterChar)) {
-        // مرز نبود → رد
+        // Not a boundary → skip
         continue;
       }
 
-      // استایل کاراکتر اول match
+      // Style of the first character of match
       const attrs = textEl.getAttributes(start);
 
-      // حذف محدوده و درج متن جدید
-      textEl.deleteText(start, end);      // end «inclusive» است
+      // Delete range and insert new text
+      textEl.deleteText(start, end);      // end is "inclusive"
       textEl.insertText(start, to);
 
       if (to.length > 0) {
@@ -108,11 +111,11 @@ function safeReplaceFromSheet() {
       }
 
       touched++;
-      // ادامه جستجو از بعدِ درج فعلی به‌طور خودکار توسط findText مدیریت می‌شود
+      // Continue search after current insert is automatically managed by findText
     }
   });
 
-  DocumentApp.getUi().alert('✅ جایگزینی انجام شد. قطعات تغییر کرده: ' + touched);
+  DocumentApp.getUi().alert('✅ Replacement done. Changed segments: ' + touched);
 }
 
 /* -------------------- Preview (approx count using boundaries) -------------------- */
@@ -120,12 +123,12 @@ function previewCounts() {
   const dict = readDictionaryObjects();
   const text = DocumentApp.getActiveDocument().getBody().getText();
 
-  let report = 'پیش‌نمایش (مرز کامل + طول‌محور):\n';
+  let report = 'Preview (Full Boundary + Length-based):\n';
   let hits = 0;
 
   dict.forEach(({ from }) => {
-    // شمارش تقریبی: با regex ساده (مرز = غیرحرفی/ابتدا/انتها)
-    // فقط برای نمایش؛ اجرای اصلی با in-place انجام می‌شود
+    // Approximate count: with simple regex (boundary = non-word/start/end)
+    // For display only; main execution is in-place
     const WORD_INNER = 'A-Za-z0-9_\\u0600-\\u06FF';
     const before = '(^|[^' + WORD_INNER + '])';
     const after  = '($|[^' + WORD_INNER + '])';
@@ -135,10 +138,10 @@ function previewCounts() {
       const count = m ? m.length : 0;
       if (count > 0) { report += `• ${from} → ${count}\n`; hits += count; }
     } catch(e) {
-      // اگر عبارتی خیلی خاص بود و خطا داد، در اجرا باز هم با in-place بررسی می‌شود
+      // If a phrase is too special and throws, it will still be checked in main in-place execution
     }
   });
 
-  if (hits === 0) report += 'موردی یافت نشد.';
+  if (hits === 0) report += 'No matches found.';
   DocumentApp.getUi().alert(report);
 }

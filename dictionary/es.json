@@ -1,0 +1,62 @@
+[
+  {
+    "from": "con el fin de",
+    "to": "para"
+  },
+  {
+    "from": "en el caso de que",
+    "to": "si"
+  },
+  {
+    "from": "debido al hecho de que",
+    "to": "porque / ya que"
+  },
+  {
+    "from": "en la actualidad",
+    "to": "ahora / actualmente"
+  },
+  {
+    "from": "es importante señalar que",
+    "to": "nota que / recuerda"
+  },
+  {
+    "from": "con anterioridad a",
+    "to": "antes de"
+  },
+  {
+    "from": "con posterioridad a",
+    "to": "después de"
+  },
+  {
+    "from": "tener en cuenta",
+    "to": "considerar"
+  },
+  {
+    "from": "llevar a cabo",
+    "to": "hacer / realizar"
+  },
+  {
+    "from": "hacer uso de",
+    "to": "usar"
+  },
+  {
+    "from": "en relación con",
+    "to": "sobre / acerca de"
+  },
+  {
+    "from": "a pesar de que",
+    "to": "aunque"
+  },
+  {
+    "from": "en el momento actual",
+    "to": "ahora"
+  },
+  {
+    "from": "en las proximidades de",
+    "to": "cerca de"
+  },
+  {
+    "from": "tomar una decisión",
+    "to": "decidir"
+  }
+]

@@ -1,24 +1,24 @@
-# استفاده از Node.js نسخه LTS
+# Use Node.js LTS version
 FROM node:18-alpine
 
-# تنظیم دایرکتوری کاری
+# Set working directory
 WORKDIR /app
 
-# کپی فایل‌های package
+# Copy package files
 COPY package*.json ./
 
-# نصب وابستگی‌ها
+# Install dependencies
 RUN npm install --production
 
-# کپی کد برنامه
+# Copy application code
 COPY server.js ./
 COPY dictionary ./dictionary
 
-# تنظیم متغیر محیطی برای پورت
+# Set environment variable for port
 ENV PORT=3000
 
-# باز کردن پورت
+# Expose port
 EXPOSE 3000
 
-# اجرای برنامه
+# Run the application
 CMD ["node", "server.js"]
