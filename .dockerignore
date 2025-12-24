@@ -1,0 +1,12 @@
+# فایل‌هایی که نباید به Docker Image کپی شوند
+node_modules
+npm-debug.log
+.git
+.gitignore
+README.md
+test-api.js
+add-on
+script.js
+script-add-word.js
+.env
+*.md
