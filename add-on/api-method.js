@@ -1,5 +1,5 @@
 /***** CONFIG *****/
-const API_URL = 'http://localhost:3000/api/dictionary'; // API server address
+const API_URL = 'https://humanize.serpify.dev/api/dictionary'; // API server address
 const MIN_FROM_LEN = 2; // Minimum 'from' length to avoid very short words
 let CURRENT_LANG = 'en'; // Default language: "en" (English), "fa" (Persian), "es" (Spanish), "pt" (Portuguese)
 /*******************/

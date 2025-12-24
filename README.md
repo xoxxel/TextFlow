@@ -30,6 +30,16 @@ A free, open-source tool to help content creators humanize their text across mul
 
 ---
 
+## 🎬 See It In Action
+
+<p align="center">
+  <img src="public/demo.gif" alt="Humanize Text Demo" width="800">
+</p>
+
+Watch how formal, robotic phrases are instantly transformed into natural, conversational language - all while preserving your document's formatting and styles!
+
+---
+
 ## 🚀 Quick Start
 
 Choose the version that fits your needs. Both are **ready to use** - no additional setup required!
