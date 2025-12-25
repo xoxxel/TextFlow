@@ -7,7 +7,7 @@ const { connectDB } = require('./custom-dictionaries/schema');
 const dictionaryRoutes = require('./custom-dictionaries/routes');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const DICT_DIR = path.join(__dirname, 'dictionary');
 
 // Supported languages
